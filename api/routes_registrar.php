@@ -97,7 +97,8 @@ route('GET', '/registrar/requests', function () {
     [$p, $per, $off] = page();
     $w = ['1=1']; $a = [];
     if (($s = trim($_GET['q'] ?? '')) !== '') {
-        $w[] = '(st.full_name LIKE ? OR st.student_no LIKE ? OR CONCAT("REQ-", LPAD(d.id, 4, "0")) LIKE ?)';
+        $code = isPg() ? "('REQ-' || LPAD(d.id::text, 4, '0'))" : "CONCAT('REQ-', LPAD(d.id, 4, '0'))";
+        $w[] = "(st.full_name LIKE ? OR st.student_no LIKE ? OR $code LIKE ?)";
         array_push($a, like($s), like($s), like($s));
     }
     if (!empty($_GET['type'])) { $w[] = 'd.doc_type = ?'; $a[] = $_GET['type']; }
@@ -160,7 +161,7 @@ route('POST', '/registrar/profile-edits/:id', function ($r) {
     if ($approve) {
         q('UPDATE students SET full_name=?, email=?, contact=?, birth_date=?, gender=?, civil_status=?, address=? WHERE id=?',
           [$e['full_name'], $e['email'], $e['contact'], $e['birth_date'], $e['gender'], $e['civil_status'], $e['address'], $e['student_id']]);
-        q('UPDATE users u JOIN students s ON s.user_id = u.id SET u.full_name = ?, u.email = ? WHERE s.id = ?', [$e['full_name'], $e['email'], $e['student_id']]);
+        q('UPDATE users SET full_name = ?, email = ? WHERE id = (SELECT user_id FROM students WHERE id = ?)', [$e['full_name'], $e['email'], $e['student_id']]);
     }
     q('UPDATE profile_edit_requests SET status = ? WHERE id = ?', [$approve ? 'Approved' : 'Rejected', $e['id']]);
     db()->commit();

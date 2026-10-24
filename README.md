@@ -22,6 +22,13 @@ npm run dev        # http://localhost:5173, /api is proxied to http://localhost/
 ```
 No Apache? Run `C:\xampp\php\php.exe -S 127.0.0.1:8000` in this folder and put `SSIS_API=http://127.0.0.1:8000` in `.env.local`.
 
+## Neon Postgres + Realtime
+When `DATABASE_URL` is set (environment or `.env.local`, written by `neon deploy`) the PHP API uses Neon Postgres instead of MySQL; set `SSIS_DB_DRIVER=mysql` to force MySQL.
+- Enable `extension=pdo_pgsql` in `C:\xampp\php\php.ini` (Apache). For the CLI use `php -d extension=pdo_pgsql -d extension=pgsql database/seed.php`.
+- `database/schema.pg.sql` is the Postgres schema; `database/seed.php` loads it plus the demo data (it resets the tables).
+- The notification bell is live through Neon Realtime: run `npm run realtime` (seals each user's query; port 8787) next to `npm run dev`, with `VITE_NEON_REALTIME_URL=$NEON_REALTIME_URL` in `.env.local`. Without it the bell polls `/api/notifications`. `node realtime/e2e-check.mjs` checks the flow end to end.
+- Allowed browser origins for live queries are listed in `neon.ts` (`neon deploy` applies them).
+
 ## Demo accounts
 All demo accounts use the password `password123`.
 

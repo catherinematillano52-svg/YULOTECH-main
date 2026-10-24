@@ -69,8 +69,8 @@ function rangeClause(): array {
     $r = $_GET['range'] ?? 'month';
     return match ($r) {
         'today' => ['DATE(p.paid_at) = CURDATE()', []],
-        'week' => ['YEARWEEK(p.paid_at, 1) = YEARWEEK(CURDATE(), 1)', []],
-        'month' => ['YEAR(p.paid_at) = YEAR(CURDATE()) AND MONTH(p.paid_at) = MONTH(CURDATE())', []],
+        'week' => [isPg() ? "DATE_TRUNC('week', p.paid_at) = DATE_TRUNC('week', CURDATE())" : 'YEARWEEK(p.paid_at, 1) = YEARWEEK(CURDATE(), 1)', []],
+        'month' => [isPg() ? "DATE_TRUNC('month', p.paid_at) = DATE_TRUNC('month', CURDATE())" : 'YEAR(p.paid_at) = YEAR(CURDATE()) AND MONTH(p.paid_at) = MONTH(CURDATE())', []],
         'custom' => ['DATE(p.paid_at) BETWEEN ? AND ?', [$_GET['from'] ?? '1970-01-01', $_GET['to'] ?? '2999-12-31']],
         default => ['1=1', []],
     };

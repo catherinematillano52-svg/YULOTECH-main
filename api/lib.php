@@ -8,32 +8,69 @@ function cfg(string $key) {
     return $c[$key];
 }
 
+function isPg(): bool { return cfg('driver') === 'pgsql'; }
+
+// Neon Postgres when DATABASE_URL is set (env or .env.local), otherwise the local XAMPP MySQL.
+function connectPg(string $url): PDO {
+    if (!extension_loaded('pdo_pgsql')) {
+        throw new RuntimeException('Enable extension=pdo_pgsql in php.ini to use the Neon database.');
+    }
+    $u = parse_url($url);
+    parse_str($u['query'] ?? '', $opt);
+    $host = $u['host'];
+    // libpq older than 14 sends no SNI, so Neon needs the endpoint id passed in the password.
+    $endpoint = explode('.', $host)[0];
+    $endpoint = preg_replace('/-pooler$/', '', $endpoint);
+    $dsn = 'pgsql:host=' . $host . ';port=' . ($u['port'] ?? 5432) . ';dbname=' . ltrim($u['path'] ?? '/neondb', '/')
+         . ';sslmode=' . ($opt['sslmode'] ?? 'require');
+    return new PDO($dsn, urldecode($u['user']), "endpoint=$endpoint\$" . urldecode($u['pass'] ?? ''));
+}
+
 function db(): PDO {
     static $pdo = null;
     if (!$pdo) {
-        $dsn = 'mysql:host=' . cfg('db_host') . ';port=' . cfg('db_port') . ';dbname=' . cfg('db_name') . ';charset=utf8mb4';
-        $pdo = new PDO($dsn, cfg('db_user'), cfg('db_pass'), [
+        $opts = [
             PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
             PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
             PDO::ATTR_EMULATE_PREPARES => false,
             PDO::ATTR_STRINGIFY_FETCHES => false,
-        ]);
-        $pdo->exec("SET time_zone = '+08:00'");
+        ];
+        if (isPg()) {
+            $pdo = connectPg(cfg('database_url'));
+            foreach ($opts as $k => $v) $pdo->setAttribute($k, $v);
+        } else {
+            $dsn = 'mysql:host=' . cfg('db_host') . ';port=' . cfg('db_port') . ';dbname=' . cfg('db_name') . ';charset=utf8mb4';
+            $pdo = new PDO($dsn, cfg('db_user'), cfg('db_pass'), $opts);
+            $pdo->exec("SET time_zone = '+08:00'");
+        }
     }
     return $pdo;
 }
 
+// The routes are written in MySQL dialect. On Postgres: camelCase aliases are quoted so they keep their case,
+// LIKE becomes case-insensitive ILIKE, and NOW()/CURDATE() use Manila time (the pooled connection has no session timezone).
+function pgSql(string $sql): string {
+    $sql = preg_replace('/\bAS\s+([a-z][a-zA-Z0-9_]*[A-Z][a-zA-Z0-9_]*)\b/', 'AS "$1"', $sql);
+    $sql = preg_replace('/\bLIKE\b/', 'ILIKE', $sql);
+    $sql = str_replace('CURDATE()', "(NOW() AT TIME ZONE 'Asia/Manila')::date", $sql);
+    return str_replace('NOW()', "(NOW() AT TIME ZONE 'Asia/Manila')", $sql);
+}
+
 function q(string $sql, array $params = []): PDOStatement {
-    $st = db()->prepare($sql);
+    $st = db()->prepare(isPg() ? pgSql($sql) : $sql);
     $st->execute($params);
     return $st;
 }
-// DECIMAL columns arrive as strings from MySQL; cast them so JSON carries real numbers.
+// Id of the row just inserted into $table (every table keyed by an auto-increment `id`).
+function insertId(string $table): int {
+    return (int)(isPg() ? db()->lastInsertId($table . '_id_seq') : db()->lastInsertId());
+}
+// DECIMAL/NUMERIC columns arrive as strings; cast them so JSON carries real numbers.
 function castDecimals(PDOStatement $st, array $rows): array {
     $dec = [];
     for ($i = 0; $i < $st->columnCount(); $i++) {
         $m = $st->getColumnMeta($i);
-        if (($m['native_type'] ?? '') === 'NEWDECIMAL') $dec[] = $m['name'];
+        if (in_array($m['native_type'] ?? '', ['NEWDECIMAL', 'numeric'], true)) $dec[] = $m['name'];
     }
     if ($dec) foreach ($rows as &$r) foreach ($dec as $c) if (isset($r[$c])) $r[$c] = (float)$r[$c];
     return $rows;

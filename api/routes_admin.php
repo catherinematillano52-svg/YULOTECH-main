@@ -59,12 +59,12 @@ route('POST', '/admin/users', function () {
     db()->beginTransaction();
     q('INSERT INTO users (username, full_name, email, password_hash, role, unit, status, must_change_password) VALUES (?,?,?,?,?,?,?,1)',
       [$username, $name, $email, password_hash($pw, PASSWORD_DEFAULT), $role, $unit ?: null, $status]);
-    $uid = (int)db()->lastInsertId();
+    $uid = insertId('users');
     if ($role === 'student') {
         $no = date('Y') . '-' . str_pad((string)$uid, 5, '0', STR_PAD_LEFT);
         q('INSERT INTO students (user_id, student_no, full_name, program, program_name, year_level, email) VALUES (?,?,?,?,?,1,?)',
           [$uid, $no, $name, $unit ?: 'TBD', $unit ?: 'To be assigned', $email]);
-        $sid = (int)db()->lastInsertId();
+        $sid = insertId('students');
         q('INSERT INTO student_balances (student_id) VALUES (?)', [$sid]);
         foreach (cfg('offices') as $k => $o) q('INSERT INTO clearance_steps (student_id, step, office) VALUES (?,?,?)', [$sid, $k + 1, $o]);
     }

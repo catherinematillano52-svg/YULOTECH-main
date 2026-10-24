@@ -6,10 +6,11 @@ export default defineConfig(({ mode }) => {
   // The PHP API runs on XAMPP Apache. In dev, /api is proxied to it so session cookies stay same-origin.
   // Set SSIS_API in .env.local (e.g. http://127.0.0.1:8000 for `php -S`) if Apache is not running.
   const env = loadEnv(mode, process.cwd(), '')
+  // /realtime is the sealing endpoint (npm run realtime) for Neon live queries.
   const target = env.SSIS_API || 'http://localhost/YULOTECH'
   return {
     base: './',
     plugins: [react()],
-    server: { proxy: { '/api': { target, changeOrigin: true } } },
+    server: { proxy: { '/api': { target, changeOrigin: true }, '/realtime': { target: 'http://127.0.0.1:8787' } } },
   }
 })

@@ -32,5 +32,5 @@ try {
     fail('Not found', 404);
 } catch (PDOException $e) {
     error_log($e->getMessage());
-    fail('Database error. Is MySQL running and the database seeded?', 500);
+    fail('Database error. Is the database reachable and seeded?', 500);
 }

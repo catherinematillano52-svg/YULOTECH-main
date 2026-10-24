@@ -1,12 +1,23 @@
 <?php
 date_default_timezone_set('Asia/Manila');
-// Usage: php database/seed.php   (creates yulotech_ssis and loads demo data)
+// Usage: php database/seed.php   (creates the schema and loads demo data)
+// Seeds Neon Postgres when DATABASE_URL is set (env or .env.local), otherwise local MySQL (yulotech_ssis).
+require __DIR__ . '/../api/lib.php';
+$pg = isPg();
+if ($pg) {
+    // PHP's CLI may not load pdo_pgsql by default: php -d extension=pdo_pgsql database/seed.php
+    $pdo = connectPg(envValue('DATABASE_URL_UNPOOLED') ?: cfg('database_url'));
+    $pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
+    $pdo->exec(file_get_contents(__DIR__ . '/schema.pg.sql'));
+} else {
+    $cfg = require __DIR__ . '/../api/config.php';
+    $pdo = new PDO("mysql:host={$cfg['db_host']};port={$cfg['db_port']};charset=utf8mb4", $cfg['db_user'], $cfg['db_pass'],
+        [PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION]);
+    $pdo->exec(file_get_contents(__DIR__ . '/schema.sql'));
+    $pdo->exec('USE ' . $cfg['db_name']);
+    $pdo->exec("SET time_zone = '+08:00'");
+}
 $cfg = require __DIR__ . '/../api/config.php';
-$pdo = new PDO("mysql:host={$cfg['db_host']};port={$cfg['db_port']};charset=utf8mb4", $cfg['db_user'], $cfg['db_pass'],
-    [PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION]);
-$pdo->exec(file_get_contents(__DIR__ . '/schema.sql'));
-$pdo->exec('USE ' . $cfg['db_name']);
-$pdo->exec("SET time_zone = '+08:00'");
 
 const PASSWORD = 'password123';
 $hash = password_hash(PASSWORD, PASSWORD_DEFAULT);
@@ -15,8 +26,10 @@ $offices = $cfg['offices'];
 function ins(PDO $p, string $t, array $row): int {
     $cols = implode(',', array_keys($row));
     $ph = implode(',', array_fill(0, count($row), '?'));
+    global $pg;
     $p->prepare("INSERT INTO $t ($cols) VALUES ($ph)")->execute(array_values($row));
-    return (int)$p->lastInsertId();
+    // student_balances is keyed by student_id and has no id sequence
+    return $pg ? ($t === 'student_balances' ? 0 : (int)$p->lastInsertId($t . '_id_seq')) : (int)$p->lastInsertId();
 }
 $ago = fn(string $s) => date('Y-m-d H:i:s', strtotime("-$s"));
 

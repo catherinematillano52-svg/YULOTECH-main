@@ -7,9 +7,14 @@
     "dev": "vite",
     "build": "vite build",
     "lint": "oxlint",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "realtime": "node realtime/server.mjs"
   },
   "dependencies": {
+    "@neon/config": "^1.9.3",
+    "@neon/env": "^1.6.4",
+    "@neon/realtime": "^0.1.2",
+    "@neon/realtime-react": "^0.1.1",
     "react": "^19.2.8",
     "react-dom": "^19.2.8"
   },

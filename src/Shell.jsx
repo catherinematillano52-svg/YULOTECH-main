@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
-import { api, ago, useApi } from './api.js'
+import { api, ago } from './api.js'
+import { NotificationFeed } from './live.jsx'
 import { go, useAuth, usePath } from './App.jsx'
 import { Alert, Field, Icon, Modal, PasswordInput, useToast } from './ui.jsx'
 import { StudentDashboard, MyCourses, Grades, Documents, Clearance, Profile } from './pages/student.jsx'
@@ -87,20 +88,25 @@ function useClickOutside(ref, fn) {
   }, [ref, fn])
 }
 
-function Topbar({ title, onMenu }) {
+function Topbar(props) {
+  const { user } = useAuth()
+  // Keyed by user so a different sign-in never reuses the previous user's live query.
+  return <NotificationFeed key={user.id}>{(notes) => <TopbarView {...props} notes={notes} />}</NotificationFeed>
+}
+
+function TopbarView({ title, onMenu, notes }) {
   const { user, logout } = useAuth()
   const [menu, setMenu] = useState(null) // 'bell' | 'user'
   const [pwd, setPwd] = useState(false)
   const [help, setHelp] = useState(false)
   const ref = useRef(null)
   useClickOutside(ref, () => setMenu(null))
-  const notes = useApi('/notifications')
-  const unread = (notes.data?.items || []).filter((n) => !n.isRead).length
+  const unread = notes.items.filter((n) => !n.isRead).length
 
   const openBell = async () => {
     const next = menu === 'bell' ? null : 'bell'
     setMenu(next)
-    if (next && unread) { try { await api('/notifications/read', { method: 'POST', body: {} }); setTimeout(notes.reload, 1500) } catch { /* ignore */ } }
+    if (next && unread) { try { await api('/notifications/read', { method: 'POST', body: {} }); if (notes.reload) setTimeout(notes.reload, 1500) } catch { /* ignore */ } }
   }
   return (
     <header className="topbar">
@@ -117,10 +123,10 @@ function Topbar({ title, onMenu }) {
             <div className="popover notif">
               <header>Notifications</header>
               <ul>
-                {(notes.data?.items || []).map((n) => (
+                {notes.items.map((n) => (
                   <li key={n.id} className={n.isRead ? '' : 'unread'}><Icon name="info" size={16} /><div>{n.message}<small>{ago(n.at)}</small></div></li>
                 ))}
-                {!(notes.data?.items || []).length && <li>You're all caught up.</li>}
+                {!notes.items.length && <li>You're all caught up.</li>}
               </ul>
             </div>
           )}

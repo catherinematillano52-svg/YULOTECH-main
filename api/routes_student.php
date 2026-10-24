@@ -141,7 +141,7 @@ route('POST', '/student/documents', function () {
     $fee = $copies * cfg('doc_fee_per_copy') + ($delivery === 'Delivery' ? cfg('delivery_fee') : 0);
     q('INSERT INTO document_requests (student_id, doc_type, purpose, delivery_method, copies, date_needed, remarks_student, fee)
        VALUES (?,?,?,?,?,?,?,?)', [$s['id'], $type, $purpose, $delivery, $copies, $needed, str('remarks', 500) ?: null, $fee]);
-    $id = (int)db()->lastInsertId();
+    $id = insertId('document_requests');
     q("INSERT INTO request_timeline (request_id, label, detail) VALUES (?, 'Request submitted', 'Submitted by student')", [$id]);
     logActivity($s['user_id'], "submitted $type request " . sprintf('REQ-%04d', $id));
     out(['ok' => true, 'code' => sprintf('REQ-%04d', $id), 'fee' => $fee], 201);

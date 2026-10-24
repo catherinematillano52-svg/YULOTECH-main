@@ -65,11 +65,12 @@ route('POST', '/department/clearance', function () {
     if (!$s) {
         if ($name === '' || $course === '') fail('Student not found. Enter a full name and course to add a new record.');
         q("INSERT INTO students (student_no, full_name, program, program_name, year_level) VALUES (?,?,?,?,1)", [$no, $name, substr($course, 0, 20), $course]);
-        $s = ['id' => (int)db()->lastInsertId()];
+        $s = ['id' => insertId('students')];
         q('INSERT INTO student_balances (student_id) VALUES (?)', [$s['id']]);
     }
     foreach (cfg('offices') as $i => $office)
-        q('INSERT IGNORE INTO clearance_steps (student_id, step, office) VALUES (?,?,?)', [$s['id'], $i + 1, $office]);
+        q(isPg() ? 'INSERT INTO clearance_steps (student_id, step, office) VALUES (?,?,?) ON CONFLICT DO NOTHING'
+                 : 'INSERT IGNORE INTO clearance_steps (student_id, step, office) VALUES (?,?,?)', [$s['id'], $i + 1, $office]);
     $status = str('status', 10);
     if (in_array($status, ['Cleared', 'On Hold'], true)) {
         q('UPDATE clearance_steps SET status = ?, updated_by = ?, updated_at = NOW() WHERE student_id = ? AND step = ?', [$status, $u['id'], $s['id'], $step]);
