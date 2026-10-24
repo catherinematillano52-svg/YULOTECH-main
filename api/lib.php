@@ -18,12 +18,18 @@ function connectPg(string $url): PDO {
     $u = parse_url($url);
     parse_str($u['query'] ?? '', $opt);
     $host = $u['host'];
-    // libpq older than 14 sends no SNI, so Neon needs the endpoint id passed in the password.
-    $endpoint = explode('.', $host)[0];
-    $endpoint = preg_replace('/-pooler$/', '', $endpoint);
     $dsn = 'pgsql:host=' . $host . ';port=' . ($u['port'] ?? 5432) . ';dbname=' . ltrim($u['path'] ?? '/neondb', '/')
          . ';sslmode=' . ($opt['sslmode'] ?? 'require');
-    return new PDO($dsn, urldecode($u['user']), "endpoint=$endpoint\$" . urldecode($u['pass'] ?? ''));
+    $user = urldecode($u['user']);
+    $pass = urldecode($u['pass'] ?? '');
+    try {
+        return new PDO($dsn, $user, $pass);
+    } catch (PDOException $e) {
+        // libpq older than 14 (XAMPP's) sends no SNI, so Neon asks for the endpoint id in the password instead.
+        if (stripos($e->getMessage(), 'endpoint') === false) throw $e;
+        $endpoint = preg_replace('/-pooler$/', '', explode('.', $host)[0]);
+        return new PDO($dsn, $user, "endpoint=$endpoint\$$pass");
+    }
 }
 
 function db(): PDO {
