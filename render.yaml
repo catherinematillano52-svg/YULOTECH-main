@@ -1,0 +1,14 @@
+services:
+  - type: web
+    name: yulotech-ssis
+    runtime: docker
+    plan: free
+    envVars:
+      - key: DATABASE_URL
+        sync: false
+      - key: NEON_REALTIME_SECRET
+        sync: false
+      - key: NEON_REALTIME_URL
+        sync: false
+      - key: VITE_NEON_REALTIME_URL
+        sync: false
