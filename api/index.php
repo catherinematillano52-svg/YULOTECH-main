@@ -31,6 +31,6 @@ try {
     }
     fail('Not found', 404);
 } catch (PDOException $e) {
-    error_log($e->getMessage());
+    error_log($e->getMessage() . ' @ ' . basename($e->getFile()) . ':' . $e->getLine() . ' ' . $method . ' ' . $path . "\n" . $e->getTraceAsString());
     fail('Database error. Is the database reachable and seeded?', 500);
 }
