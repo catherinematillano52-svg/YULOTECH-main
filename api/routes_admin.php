@@ -56,19 +56,37 @@ route('POST', '/admin/users', function () {
     $base = preg_replace('/[^a-z0-9._]/', '', explode('@', $email)[0]) ?: 'user';
     $username = $base; $i = 1;
     while (val('SELECT COUNT(*) FROM users WHERE username = ?', [$username])) $username = $base . ++$i;
-    db()->beginTransaction();
-    q('INSERT INTO users (username, full_name, email, password_hash, role, unit, status, must_change_password) VALUES (?,?,?,?,?,?,?,1)',
-      [$username, $name, $email, password_hash($pw, PASSWORD_DEFAULT), $role, $unit ?: null, $status]);
-    $uid = insertId('users');
-    if ($role === 'student') {
-        $no = date('Y') . '-' . str_pad((string)$uid, 5, '0', STR_PAD_LEFT);
-        q('INSERT INTO students (user_id, student_no, full_name, program, program_name, year_level, email) VALUES (?,?,?,?,?,1,?)',
-          [$uid, $no, $name, $unit ?: 'TBD', $unit ?: 'To be assigned', $email]);
-        $sid = insertId('students');
-        q('INSERT INTO student_balances (student_id) VALUES (?)', [$sid]);
-        foreach (cfg('offices') as $k => $o) q('INSERT INTO clearance_steps (student_id, step, office) VALUES (?,?,?)', [$sid, $k + 1, $o]);
+    $create = function () use ($username, $name, $email, $pw, $role, $unit, $status) {
+        db()->beginTransaction();
+        try {
+            $uid = insertRow('INSERT INTO users (username, full_name, email, password_hash, role, unit, status, must_change_password) VALUES (?,?,?,?,?,?,?,1)',
+              [$username, $name, $email, password_hash($pw, PASSWORD_DEFAULT), $role, $unit ?: null, $status]);
+            if ($role === 'student') {
+                // Number is taken from the users id; step past any number already issued (seeded or entered by hand).
+                $n = $uid;
+                do { $no = date('Y') . '-' . str_pad((string)$n++, 5, '0', STR_PAD_LEFT); } while (val('SELECT COUNT(*) FROM students WHERE student_no = ?', [$no]));
+                // students.program is VARCHAR(20); a longer "Grade / Department" entry must not abort the account.
+                $sid = insertRow('INSERT INTO students (user_id, student_no, full_name, program, program_name, year_level, email) VALUES (?,?,?,?,?,1,?)',
+                  [$uid, $no, $name, substr($unit ?: 'TBD', 0, 20), $unit ?: 'To be assigned', $email]);
+                q('INSERT INTO student_balances (student_id) VALUES (?)', [$sid]);
+                foreach (cfg('offices') as $k => $o) q('INSERT INTO clearance_steps (student_id, step, office) VALUES (?,?,?)', [$sid, $k + 1, $o]);
+            }
+            db()->commit();
+        } catch (Throwable $e) {
+            if (db()->inTransaction()) db()->rollBack();
+            throw $e;
+        }
+    };
+    try {
+        $create();
+    } catch (PDOException $e) {
+        // Postgres: a sequence that lags the rows already in the table (data loaded with explicit ids) gives a duplicate key
+        // on the primary key. Re-sync every id sequence once and retry.
+        if (!isPg() || $e->getCode() !== '23505' || stripos($e->getMessage(), '_pkey') === false) throw $e;
+        foreach (['users', 'students', 'clearance_steps'] as $t)
+            db()->query("SELECT setval(pg_get_serial_sequence('$t', 'id'), COALESCE((SELECT MAX(id) FROM $t), 1))");
+        $create();
     }
-    db()->commit();
     logActivity($me['id'], "created account $username ($role)");
     out(['ok' => true, 'username' => $username], 201);
 });

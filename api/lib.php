@@ -71,6 +71,13 @@ function q(string $sql, array $params = []): PDOStatement {
 function insertId(string $table): int {
     return (int)(isPg() ? db()->lastInsertId($table . '_id_seq') : db()->lastInsertId());
 }
+// Run an INSERT and return the new row's id. Postgres uses RETURNING: currval() through lastInsertId() fails quietly when the
+// sequence name differs, which leaves the transaction aborted and the next statement dies with SQLSTATE 25P02.
+function insertRow(string $sql, array $params = []): int {
+    if (isPg()) return (int)q($sql . ' RETURNING id', $params)->fetchColumn();
+    q($sql, $params);
+    return (int)db()->lastInsertId();
+}
 // DECIMAL/NUMERIC columns arrive as strings; cast them so JSON carries real numbers.
 function castDecimals(PDOStatement $st, array $rows): array {
     $dec = [];

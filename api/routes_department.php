@@ -64,8 +64,7 @@ route('POST', '/department/clearance', function () {
     $s = row('SELECT id FROM students WHERE student_no = ?', [$no]);
     if (!$s) {
         if ($name === '' || $course === '') fail('Student not found. Enter a full name and course to add a new record.');
-        q("INSERT INTO students (student_no, full_name, program, program_name, year_level) VALUES (?,?,?,?,1)", [$no, $name, substr($course, 0, 20), $course]);
-        $s = ['id' => insertId('students')];
+        $s = ['id' => insertRow("INSERT INTO students (student_no, full_name, program, program_name, year_level) VALUES (?,?,?,?,1)", [$no, $name, substr($course, 0, 20), $course])];
         q('INSERT INTO student_balances (student_id) VALUES (?)', [$s['id']]);
     }
     foreach (cfg('offices') as $i => $office)
