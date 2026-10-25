@@ -43,6 +43,9 @@ function db(): PDO {
         ];
         if (isPg()) {
             $pdo = connectPg(cfg('database_url'));
+            // Neon's pooler (PgBouncer) drops named server-side prepared statements between requests; the implicit DEALLOCATE
+            // PDO sends then fails and silently aborts the open transaction (SQLSTATE 25P02 on the next statement).
+            $opts[PDO::ATTR_EMULATE_PREPARES] = true;
             foreach ($opts as $k => $v) $pdo->setAttribute($k, $v);
         } else {
             $dsn = 'mysql:host=' . cfg('db_host') . ';port=' . cfg('db_port') . ';dbname=' . cfg('db_name') . ';charset=utf8mb4';
